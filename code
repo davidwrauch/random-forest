@@ -1,0 +1,57 @@
+library(caret)
+library(randomForest)
+library(dplyr)
+library(mltools)
+library(data.table)
+library(haven)
+library(purrr)
+library(stats )
+
+#read data
+train_titanic <- read.table('train.csv', sep=",", header= TRUE)
+test_titanic <- read.table('test.csv', sep = ",", header = TRUE)
+
+table(train_titanic[,c('Survived', 'Pclass')])
+
+# Converting ‘Survived’ to a factor
+train_titanic$Survived <- factor(train_titanic$Survived)
+
+# Set a random seed
+set.seed(51)
+
+# Training using ‘random forest’ algorithm
+model <- train(Survived ~ Pclass + Sex + SibSp +
+                 Embarked + Parch + Fare, # Survived is a function of the variables we decided to include
+               data = train_titanic, # Use the train data frame as the training data
+               method = 'rf',
+               trControl = trainControl(method = 'cv', # Use cross-validation
+                                        number = 5)) # Use 5 folds for cross-validation
+#predictions are 81% accurate
+
+#predict values using RF on test data
+test_titanic$Fare <- ifelse(is.na(test_titanic$Fare), mean(test_titanic$Fare, na.rm = TRUE), test_titanic$Fare)
+test_titanic$Survived <- predict(model, newdata = test_titanic)
+
+#find variable importance
+caret::varImp(model)
+#variable importance, being a male is the most powerful predictor by far
+#          Overall
+#Sexmale   100.000
+#Fare       50.831
+#Pclass     30.435
+#Parch      11.047
+#SibSp      10.741
+#EmbarkedS   2.708
+##EmbarkedC   2.632
+#EmbarkedQ   0.000
+
+#turn data into a dataframe for more analysis
+test_titanic_df <- as.data.frame(test_titanic)
+
+#confirm survival rates are different between men and women (top predictor)
+sum_test_df <- test_titanic_df %>%  
+  mutate(amount=1,
+         surived=as.numeric(Survived)-1) %>% 
+  group_by(Sex) %>% 
+  summarise(survival= sum(surived)/sum(amount))
+#indeed, 77 females surived out of 100 and only 3 males survived out of 100
